@@ -7,6 +7,14 @@ import mediapipe as mp
 import numpy as np
 import pyautogui
 
+# Windows ShowWindow command constants
+_SW_MAXIMIZE = 3
+_SW_MINIMIZE = 6
+
+# Title of the gesture control OpenCV window (used to exclude it from target tracking)
+_GESTURE_WIN_TITLE = "Gesture Mouse Control"
+_WIN_TITLE_BUF = 256
+
 
 def get_virtual_screen_bounds() -> tuple[int, int, int, int]:
     """Return virtual desktop bounds (supports multi-monitor on Windows)."""
@@ -130,8 +138,8 @@ def main() -> None:
     pan_speed_px_per_sec = 450
     hold_stationary_threshold_px = 45
     pan_ramp_seconds = 0.35
-    two_hand_move_threshold_px = 10.0
-    two_hand_gap_threshold_px = 18.0
+    two_hand_move_threshold_px = 5.0   # Lowered from 10.0; smoothing reduces raw deltas to ~35%
+    two_hand_gap_threshold_px = 10.0   # Lowered from 18.0; same reason
     gesture_action_cooldown = 1.0
     center_smoothing_alpha = 0.35
     combo_confirm_frames = 3
@@ -154,6 +162,7 @@ def main() -> None:
     outward_two_score = 0
     inward_three_score = 0
     inward_two_score = 0
+    last_target_hwnd = None        # Last foreground window that isn't this app
 
     try:
         while True:
@@ -167,6 +176,15 @@ def main() -> None:
 
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             results = hands.process(rgb)
+
+            # Track the most recent foreground window that is not this app so that
+            # maximize/minimize gestures target the user's intended window.
+            if hasattr(ctypes, "windll"):
+                _fg = ctypes.windll.user32.GetForegroundWindow()
+                _buf = ctypes.create_unicode_buffer(_WIN_TITLE_BUF)
+                ctypes.windll.user32.GetWindowTextW(_fg, _buf, _WIN_TITLE_BUF)
+                if _buf.value != _GESTURE_WIN_TITLE:
+                    last_target_hwnd = _fg
 
             # Dynamic active area centered in frame to reduce required hand movement.
             active_w = int(frame_width * active_area_ratio)
@@ -394,7 +412,14 @@ def main() -> None:
                         )
 
                         if outward_two_score >= combo_confirm_frames and can_trigger_combo:
-                            pyautogui.hotkey("win", "up")
+                            if (
+                                hasattr(ctypes, "windll")
+                                and last_target_hwnd
+                                and ctypes.windll.user32.IsWindow(last_target_hwnd)
+                            ):
+                                ctypes.windll.user32.ShowWindow(last_target_hwnd, _SW_MAXIMIZE)
+                            else:
+                                pyautogui.hotkey("win", "up")
                             last_combo_action_time = now
                             outward_two_score = 0
                             inward_three_score = 0
@@ -424,7 +449,14 @@ def main() -> None:
                                 2,
                             )
                         elif inward_two_score >= combo_confirm_frames and can_trigger_combo:
-                            pyautogui.hotkey("win", "down")
+                            if (
+                                hasattr(ctypes, "windll")
+                                and last_target_hwnd
+                                and ctypes.windll.user32.IsWindow(last_target_hwnd)
+                            ):
+                                ctypes.windll.user32.ShowWindow(last_target_hwnd, _SW_MINIMIZE)
+                            else:
+                                pyautogui.hotkey("win", "down")
                             last_combo_action_time = now
                             outward_two_score = 0
                             inward_three_score = 0
@@ -504,7 +536,7 @@ def main() -> None:
                 2,
             )
 
-            cv2.imshow("Gesture Mouse Control", frame)
+            cv2.imshow(_GESTURE_WIN_TITLE, frame)
 
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 break
