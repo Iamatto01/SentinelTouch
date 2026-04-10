@@ -1,0 +1,9 @@
+mediapipe>=0.10.0
+opencv-python>=4.8.0
+pyautogui>=0.9.54
+numpy>=1.24.0
+SpeechRecognition>=3.10.0
+pyttsx3>=2.90
+# PyAudio is the audio I/O backend required by SpeechRecognition for microphone access.
+# On Linux: sudo apt-get install portaudio19-dev before installing with pip.
+PyAudio>=0.2.13
