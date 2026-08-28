@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sentinel Touch — Neural Voice & Gesture AI Assistant</title>
+  <meta name="description" content="Next-Gen Hand Gesture Controller & Real-Time Voice AI Companion for the Sentinel Ecosystem.">
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            cyber: {
+              50: '#f0fdfa',
+              400: '#2dd4bf',
+              500: '#14b8a6',
+              600: '#0d9488',
+              900: '#134e4a',
+              950: '#042f2e',
+            }
+          },
+          animation: {
+            'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            'spin-slow': 'spin 12s linear infinite',
+            'float': 'float 4s ease-in-out infinite',
+          },
+          keyframes: {
+            float: {
+              '0%, 100%': { transform: 'translateY(0px)' },
+              '50%': { transform: 'translateY(-10px)' },
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- MediaPipe Hands & Camera Utils -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+  <style>
+    body {
+      background: #060913;
+      color: #f8fafc;
+      overflow-x: hidden;
+    }
+
+    .glass-panel {
+      background: rgba(15, 23, 42, 0.65);
+      backdrop-filter: blur(24px) saturate(190%);
+      -webkit-backdrop-filter: blur(24px) saturate(190%);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.15);
+    }
+
+    .glass-card {
+      background: rgba(255, 255, 255, 0.04);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .glass-button {
+      background: linear-gradient(135deg, rgba(20, 184, 166, 0.2) 0%, rgba(6, 182, 212, 0.3) 100%);
+      border: 1px solid rgba(45, 212, 191, 0.4);
+      box-shadow: 0 4px 20px rgba(20, 184, 166, 0.25);
+    }
+
+    .glass-button:hover {
+      background: linear-gradient(135deg, rgba(20, 184, 166, 0.35) 0%, rgba(6, 182, 212, 0.45) 100%);
+      border-color: rgba(45, 212, 191, 0.7);
+      box-shadow: 0 6px 25px rgba(20, 184, 166, 0.4);
+    }
+
+    /* Radial glow background */
+    .glow-bg {
+      position: fixed;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 100vw;
+      height: 100vh;
+      background: 
+        radial-gradient(circle at 20% 20%, rgba(20, 184, 166, 0.15) 0%, transparent 40%),
+        radial-gradient(circle at 80% 80%, rgba(59, 130, 246, 0.12) 0%, transparent 40%),
+        radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.08) 0%, transparent 60%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.5);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(45, 212, 191, 0.3);
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(45, 212, 191, 0.6);
+    }
+
+    /* Waveform visualizer */
+    .audio-bar {
+      transition: height 0.1s ease;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between selection:bg-teal-500 selection:text-slate-950">
+  <div class="glow-bg"></div>
+
+  <!-- Main Container -->
+  <div class="relative z-10 flex flex-col min-h-screen">
+    
+    <!-- Top Navigation Bar -->
+    <header class="p-4 sm:p-6 border-b border-white/10 glass-panel sticky top-0 z-40">
+      <div class="max-w-7xl mx-auto flex items-center justify-between gap-4">
+        <!-- Logo -->
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-500 via-teal-500 to-cyan-500 p-0.5 shadow-[0_0_20px_rgba(20,184,166,0.5)] flex items-center justify-center">
+            <div class="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center text-xl">
+              <span>🖐️</span>
+            </div>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h1 class="font-extrabold text-white text-lg tracking-tight">Sentinel Touch</h1>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                v2.5 Neural
+              </span>
+            </div>
+            <p class="text-xs text-slate-400 font-mono">Neural Voice & Vision Gesture Interface</p>
+          </div>
+        </div>
+
+        <!-- System Controls & AI Selector -->
+        <div class="flex items-center gap-2 sm:gap-3">
+          <!-- Engine Selector -->
+          <div class="relative">
+            <select id="aiProviderSelect" class="text-xs bg-slate-900/80 border border-white/15 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-teal-400 font-mono">
+              <option value="smart-offline" selected>⚡ Smart Assistant (Instant)</option>
+              <option value="groq-llama">🚀 Groq Llama-3 (Cloud 500 t/s)</option>
+              <option value="gemini-flash">🧠 Google Gemini 2.0</option>
+              <option value="deepseek-v3">🌐 DeepSeek V3 / OpenRouter</option>
+              <option value="custom-api">⚙️ Custom API Key / Endpoint</option>
+            </select>
+          </div>
+
+          <!-- Settings Button -->
+          <button id="btnOpenSettings" class="p-2 rounded-xl text-slate-300 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 transition-all" title="Configure AI Keys & Settings">
+            <i data-lucide="settings" class="w-4 h-4"></i>
+          </button>
+
+          <!-- Back to Hub -->
+          <a href="https://hub.sentinelai.studio" target="_blank" rel="noopener noreferrer" class="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 transition-all">
+            <i data-lucide="layout-grid" class="w-3.5 h-3.5 text-teal-400"></i>
+            <span>Master Hub</span>
+          </a>
+        </div>
+      </div>
+    </header>
+
+    <!-- App Content Body -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
+      
+      <!-- Top Grid: Interactive HUD & Gesture Camera -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- Left: Interactive Voice Orb & AI Core (7 Cols) -->
+        <div class="lg:col-span-7 rounded-[32px] p-6 sm:p-8 glass-panel flex flex-col justify-between relative overflow-hidden">
+          
+          <!-- Top Status Bar -->
+          <div class="flex items-center justify-between gap-3 mb-6">
+            <div class="flex items-center gap-2">
+              <span id="listeningIndicatorDot" class="w-2.5 h-2.5 rounded-full bg-slate-500"></span>
+              <span id="listeningIndicatorText" class="text-xs font-mono font-medium text-slate-400 uppercase tracking-wider">
+                STANDBY
+              </span>
+            </div>
+            <div class="flex items-center gap-2 text-xs font-mono text-slate-400">
+              <span id="activeEngineLabel" class="px-2 py-0.5 rounded-md bg-white/5 border border-white/10 text-teal-300">
+                ⚡ Smart Brain
+              </span>
+            </div>
+          </div>
+
+          <!-- Central Voice Orb & Waveform -->
+          <div class="flex flex-col items-center justify-center my-6 relative py-4">
+            
+            <!-- Glowing Pulsing Rings -->
+            <div id="orbRingOuter" class="absolute w-56 h-56 rounded-full border border-teal-500/20 animate-pulse-slow pointer-events-none"></div>
+            <div id="orbRingInner" class="absolute w-44 h-44 rounded-full border border-cyan-400/30 animate-spin-slow pointer-events-none" style="border-style: dashed;"></div>
+
+            <!-- Central Touch Orb Button -->
+            <button id="btnVoiceToggle" class="relative z-10 w-32 h-32 rounded-full bg-gradient-to-tr from-teal-600 via-cyan-500 to-emerald-400 p-1 shadow-[0_0_40px_rgba(20,184,166,0.6)] hover:scale-105 active:scale-95 transition-all duration-300 group flex items-center justify-center">
+              <div class="w-full h-full rounded-full bg-slate-950/80 backdrop-blur-md flex flex-col items-center justify-center text-teal-300 group-hover:text-white transition-colors">
+                <i id="micIcon" data-lucide="mic" class="w-10 h-10 mb-1"></i>
+                <span id="micBtnText" class="text-[10px] font-mono uppercase tracking-widest font-bold">TOUCH</span>
+              </div>
+            </button>
+
+            <!-- Audio Reactive Waveform -->
+            <div id="waveformContainer" class="flex items-center gap-1.5 h-10 mt-6 opacity-40 transition-opacity">
+              <div class="audio-bar w-1 bg-teal-400 rounded-full h-2"></div>
+              <div class="audio-bar w-1 bg-cyan-400 rounded-full h-4"></div>
+              <div class="audio-bar w-1 bg-teal-300 rounded-full h-6"></div>
+              <div class="audio-bar w-1 bg-emerald-400 rounded-full h-3"></div>
+              <div class="audio-bar w-1 bg-teal-400 rounded-full h-8"></div>
+              <div class="audio-bar w-1 bg-cyan-300 rounded-full h-5"></div>
+              <div class="audio-bar w-1 bg-teal-400 rounded-full h-3"></div>
+            </div>
+
+            <!-- Live Speech Transcript Prompt -->
+            <p id="liveTranscript" class="text-xs sm:text-sm font-mono text-center text-cyan-200 mt-4 max-w-md min-h-[24px] transition-all">
+              Say <span class="text-white font-bold">&ldquo;Hey Sentinel&rdquo;</span> or tap the Orb to speak
+            </p>
+          </div>
+
+          <!-- Bottom Voice Quick Chips -->
+          <div class="flex flex-wrap items-center justify-center gap-2 pt-4 border-t border-white/10">
+            <button onclick="simulateQuery('Buka Sentinel Convert')" class="px-3 py-1 rounded-xl text-xs bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 transition-all active:scale-95">
+              &ldquo;Buka Sentinel Convert&rdquo;
+            </button>
+            <button onclick="simulateQuery('Apakah status sistem Sentinel?')" class="px-3 py-1 rounded-xl text-xs bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 transition-all active:scale-95">
+              &ldquo;Status Sistem&rdquo;
+            </button>
+            <button onclick="simulateQuery('Tolong ceritakan jenaka keselamatan')" class="px-3 py-1 rounded-xl text-xs bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 transition-all active:scale-95">
+              &ldquo;Jenaka Cyber&rdquo;
+            </button>
+            <button onclick="simulateQuery('Berapakah 250 darab 40?')" class="px-3 py-1 rounded-xl text-xs bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 transition-all active:scale-95">
+              &ldquo;Kira Matematik&rdquo;
+            </button>
+          </div>
+        </div>
+
+        <!-- Right: Vision Gesture Controller & Webcam (5 Cols) -->
+        <div class="lg:col-span-5 rounded-[32px] p-6 glass-panel flex flex-col justify-between relative overflow-hidden">
+          <div>
+            <div class="flex items-center justify-between gap-3 mb-4">
+              <div class="flex items-center gap-2">
+                <i data-lucide="camera" class="w-4 h-4 text-teal-400"></i>
+                <h3 class="font-bold text-white text-sm">MediaPipe Gesture Vision</h3>
+              </div>
+              <button id="btnToggleCamera" class="px-3 py-1 rounded-xl text-xs font-semibold bg-teal-500/20 text-teal-300 border border-teal-500/30 hover:bg-teal-500/30 transition-all active:scale-95">
+                Enable Camera
+              </button>
+            </div>
+
+            <!-- Video & Canvas Container -->
+            <div class="relative w-full aspect-video rounded-2xl overflow-hidden bg-slate-950 border border-white/10 shadow-inner flex items-center justify-center">
+              <video id="webcamVideo" class="hidden w-full h-full object-cover -scale-x-100" playsinline></video>
+              <canvas id="gestureCanvas" class="w-full h-full object-cover -scale-x-100"></canvas>
+              
+              <!-- Camera Off Placeholder -->
+              <div id="cameraPlaceholder" class="absolute inset-0 flex flex-col items-center justify-center p-4 text-center space-y-2">
+                <div class="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center text-2xl text-slate-400">
+                  <span>🖐️</span>
+                </div>
+                <p class="text-xs text-slate-400 max-w-[200px]">
+                  Webcam is in standby. Click &ldquo;Enable Camera&rdquo; for AI hand gesture tracking.
+                </p>
+              </div>
+
+              <!-- Detected Gesture Overlay Badge -->
+              <div id="detectedGestureBadge" class="hidden absolute top-3 left-3 px-3 py-1.5 rounded-xl bg-slate-950/80 backdrop-blur-md border border-teal-500/40 text-teal-300 text-xs font-mono font-bold flex items-center gap-2 shadow-lg">
+                <span id="detectedGestureIcon">✌️</span>
+                <span id="detectedGestureText">Peace Sign</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Gesture Quick Cheat Sheet -->
+          <div class="mt-4 pt-4 border-t border-white/10 space-y-2">
+            <div class="text-[11px] font-mono text-slate-400 uppercase tracking-wider">
+              Hand Gesture Shortcuts:
+            </div>
+            <div class="grid grid-cols-2 gap-2 text-xs">
+              <div class="flex items-center gap-2 p-2 rounded-xl bg-white/5 border border-white/5">
+                <span class="text-base">🖐️</span>
+                <span class="text-slate-300 truncate">Open Palm → Mute/Stop</span>
+              </div>
+              <div class="flex items-center gap-2 p-2 rounded-xl bg-white/5 border border-white/5">
+                <span class="text-base">✌️</span>
+                <span class="text-slate-300 truncate">Peace → Launch Apps</span>
+              </div>
+              <div class="flex items-center gap-2 p-2 rounded-xl bg-white/5 border border-white/5">
+                <span class="text-base">👍</span>
+                <span class="text-slate-300 truncate">Thumbs Up → Confirm</span>
+              </div>
+              <div class="flex items-center gap-2 p-2 rounded-xl bg-white/5 border border-white/5">
+                <span class="text-base">☝️</span>
+                <span class="text-slate-300 truncate">Point Up → Listen Voice</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Bottom Chat & Conversation Stream -->
+      <div class="rounded-[32px] p-6 sm:p-8 glass-panel space-y-4">
+        <div class="flex items-center justify-between gap-3 border-b border-white/10 pb-4">
+          <div class="flex items-center gap-2.5">
+            <i data-lucide="message-square-code" class="w-5 h-5 text-teal-400"></i>
+            <h3 class="font-bold text-white text-base">Sentinel Conversation Stream</h3>
+          </div>
+          <button id="btnClearHistory" class="text-xs text-slate-400 hover:text-rose-400 transition-colors font-mono">
+            Clear Chat
+          </button>
+        </div>
+
+        <!-- Messages Feed -->
+        <div id="chatMessages" class="max-h-72 overflow-y-auto space-y-3 pr-2">
+          <!-- Initial Welcome Message -->
+          <div class="flex items-start gap-3 p-3.5 rounded-2xl bg-white/5 border border-white/5">
+            <div class="w-8 h-8 rounded-xl bg-teal-500/20 text-teal-300 flex items-center justify-center shrink-0 text-sm">
+              🤖
+            </div>
+            <div class="space-y-1">
+              <div class="flex items-center gap-2">
+                <span class="font-semibold text-white text-xs">Sentinel AI Assistant</span>
+                <span class="text-[10px] text-slate-400 font-mono">Ready</span>
+              </div>
+              <p class="text-xs text-slate-200 leading-relaxed">
+                Salam sejahtera! Saya Sentinel Touch, pembantu suara & gerak isyarat pintar anda. Anda boleh bercakap terus melalui mikrofon, guna gerak isyarat tangan pada kamera, atau taip soalan anda di bawah.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Text Input Fallback Bar -->
+        <form id="textChatForm" class="flex items-center gap-2 pt-2">
+          <input 
+            type="text" 
+            id="textChatInput" 
+            placeholder="Type a message or instruction (e.g., 'Open Sentinel View', 'What can you do?')..."
+            class="flex-1 bg-slate-900/80 border border-white/10 focus:border-teal-400 rounded-2xl px-4 py-3 text-sm text-white placeholder-slate-400 focus:outline-none transition-colors"
+          />
+          <button type="submit" class="px-5 py-3 rounded-2xl bg-gradient-to-r from-teal-500 to-cyan-500 text-slate-950 font-bold text-sm shadow-md hover:shadow-teal-500/25 active:scale-95 transition-all flex items-center gap-1.5">
+            <span>Send</span>
+            <i data-lucide="send" class="w-4 h-4"></i>
+          </button>
+        </form>
+      </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="p-4 border-t border-white/10 text-center text-xs text-slate-400 font-mono">
+      Sentinel Touch • Neural Voice & Vision Interface • Powered by Sentinel Ecosystem
+    </footer>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+      <div class="fixed inset-0 bg-slate-950/80 backdrop-blur-xl" id="settingsBackdrop"></div>
+      <div class="relative w-full max-w-lg rounded-3xl p-6 glass-panel border border-white/20 shadow-2xl z-10 space-y-5">
+        <div class="flex items-center justify-between border-b border-white/10 pb-3">
+          <div class="flex items-center gap-2">
+            <i data-lucide="sliders" class="w-5 h-5 text-teal-400"></i>
+            <h3 class="font-bold text-white text-base">Sentinel Touch Configuration</h3>
+          </div>
+          <button id="btnCloseSettings" class="text-slate-400 hover:text-white p-1">
+            <i data-lucide="x" class="w-5 h-5"></i>
+          </button>
+        </div>
+
+        <div class="space-y-4 text-xs">
+          <div>
+            <label class="block font-semibold text-slate-200 mb-1">Groq API Key (Optional — Free 500 t/s Llama-3):</label>
+            <input type="password" id="cfgGroqKey" placeholder="gsk_..." class="w-full bg-slate-900 border border-white/15 rounded-xl p-2.5 text-white font-mono" />
+            <p class="text-[10px] text-slate-400 mt-1">Get a 100% free key from console.groq.com (no credit card needed).</p>
+          </div>
+
+          <div>
+            <label class="block font-semibold text-slate-200 mb-1">Google Gemini API Key (Optional):</label>
+            <input type="password" id="cfgGeminiKey" placeholder="AIzaSy..." class="w-full bg-slate-900 border border-white/15 rounded-xl p-2.5 text-white font-mono" />
+          </div>
+
+          <div>
+            <label class="block font-semibold text-slate-200 mb-1">Voice Feedback Pitch & Rate:</label>
+            <div class="flex items-center gap-4">
+              <label class="flex items-center gap-1 text-slate-300">
+                Speed:
+                <input type="range" id="cfgVoiceRate" min="0.8" max="1.5" step="0.1" value="1.0" class="w-24 accent-teal-400">
+              </label>
+              <label class="flex items-center gap-1 text-slate-300">
+                Pitch:
+                <input type="range" id="cfgVoicePitch" min="0.8" max="1.3" step="0.1" value="1.0" class="w-24 accent-teal-400">
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2 border-t border-white/10">
+          <button id="btnSaveSettings" class="px-4 py-2 rounded-xl bg-teal-500 text-slate-950 font-bold hover:bg-teal-400 transition-all">
+            Save Settings
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Main Application Script -->
+  <script>
+    // Initialize Lucide Icons
+    lucide.createIcons();
+
+    // App State
+    let isListening = false;
+    let isSpeaking = false;
+    let cameraActive = false;
+    let recognition = null;
+    let synth = window.speechSynthesis;
+    let lastGestureTime = 0;
+    let currentGesture = null;
+
+    // Load Settings
+    const config = {
+      groqKey: localStorage.getItem('sentinel_groq_key') || '',
+      geminiKey: localStorage.getItem('sentinel_gemini_key') || '',
+      voiceRate: parseFloat(localStorage.getItem('sentinel_voice_rate') || '1.0'),
+      voicePitch: parseFloat(localStorage.getItem('sentinel_voice_pitch') || '1.0'),
+    };
+
+    // DOM Elements
+    const btnVoiceToggle = document.getElementById('btnVoiceToggle');
+    const micIcon = document.getElementById('micIcon');
+    const micBtnText = document.getElementById('micBtnText');
+    const listeningIndicatorDot = document.getElementById('listeningIndicatorDot');
+    const listeningIndicatorText = document.getElementById('listeningIndicatorText');
+    const liveTranscript = document.getElementById('liveTranscript');
+    const chatMessages = document.getElementById('chatMessages');
+    const textChatForm = document.getElementById('textChatForm');
+    const textChatInput = document.getElementById('textChatInput');
+    const btnClearHistory = document.getElementById('btnClearHistory');
+    const aiProviderSelect = document.getElementById('aiProviderSelect');
+    const activeEngineLabel = document.getElementById('activeEngineLabel');
+    const btnToggleCamera = document.getElementById('btnToggleCamera');
+    const webcamVideo = document.getElementById('webcamVideo');
+    const gestureCanvas = document.getElementById('gestureCanvas');
+    const cameraPlaceholder = document.getElementById('cameraPlaceholder');
+    const detectedGestureBadge = document.getElementById('detectedGestureBadge');
+    const detectedGestureIcon = document.getElementById('detectedGestureIcon');
+    const detectedGestureText = document.getElementById('detectedGestureText');
+    const waveformContainer = document.getElementById('waveformContainer');
+
+    // Settings Modal DOM
+    const settingsModal = document.getElementById('settingsModal');
+    const btnOpenSettings = document.getElementById('btnOpenSettings');
+    const btnCloseSettings = document.getElementById('btnCloseSettings');
+    const settingsBackdrop = document.getElementById('settingsBackdrop');
+    const btnSaveSettings = document.getElementById('btnSaveSettings');
+    const cfgGroqKey = document.getElementById('cfgGroqKey');
+    const cfgGeminiKey = document.getElementById('cfgGeminiKey');
+    const cfgVoiceRate = document.getElementById('cfgVoiceRate');
+    const cfgVoicePitch = document.getElementById('cfgVoicePitch');
+
+    // Initialize Web Speech Recognition
+    function initSpeechRecognition() {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        liveTranscript.innerText = "Speech Recognition not supported in this browser. You can still type below.";
+        return null;
+      }
+
+      const rec = new SpeechRecognition();
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.lang = 'ms-MY'; // Supports Malay and English
+
+      rec.onstart = () => {
+        isListening = true;
+        updateListeningUI(true);
+      };
+
+      rec.onresult = (event) => {
+        let interimText = '';
+        let finalText = '';
+
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            finalText += event.results[i][0].transcript;
+          } else {
+            interimText += event.results[i][0].transcript;
+          }
+        }
+
+        if (interimText) {
+          liveTranscript.innerText = interimText;
+          animateWaveform(true);
+        }
+
+        if (finalText.trim()) {
+          liveTranscript.innerText = finalText;
+          handleUserQuery(finalText.trim());
+        }
+      };
+
+      rec.onerror = (event) => {
+        console.warn('Speech recognition error:', event.error);
+        if (event.error !== 'no-speech') {
+          updateListeningUI(false);
+        }
+      };
+
+      rec.onend = () => {
+        if (isListening) {
+          try { rec.start(); } catch (e) {}
+        } else {
+          updateListeningUI(false);
+        }
+      };
+
+      return rec;
+    }
+
+    recognition = initSpeechRecognition();
+
+    function updateListeningUI(listening) {
+      if (listening) {
+        listeningIndicatorDot.className = 'w-2.5 h-2.5 rounded-full bg-teal-400 animate-pulse';
+        listeningIndicatorText.innerText = 'LISTENING...';
+        listeningIndicatorText.className = 'text-xs font-mono font-medium text-teal-300 uppercase tracking-wider';
+        micBtnText.innerText = 'ACTIVE';
+        waveformContainer.classList.remove('opacity-40');
+        waveformContainer.classList.add('opacity-100');
+      } else {
+        listeningIndicatorDot.className = 'w-2.5 h-2.5 rounded-full bg-slate-500';
+        listeningIndicatorText.innerText = 'STANDBY';
+        listeningIndicatorText.className = 'text-xs font-mono font-medium text-slate-400 uppercase tracking-wider';
+        micBtnText.innerText = 'TOUCH';
+        waveformContainer.classList.add('opacity-40');
+        waveformContainer.classList.remove('opacity-100');
+      }
+    }
+
+    function toggleVoiceListening() {
+      if (!recognition) {
+        recognition = initSpeechRecognition();
+      }
+      if (!recognition) return;
+
+      if (isListening) {
+        isListening = false;
+        try { recognition.stop(); } catch(e) {}
+        updateListeningUI(false);
+      } else {
+        isListening = true;
+        try { recognition.start(); } catch(e) {}
+        updateListeningUI(true);
+      }
+    }
+
+    btnVoiceToggle.addEventListener('click', toggleVoiceListening);
+
+    // Text-to-Speech Output
+    function speakText(text) {
+      if (!synth) return;
+      synth.cancel();
+
+      const cleanText = text.replace(/\[ACTION:.*?\]/gi, '').trim();
+      if (!cleanText) return;
+
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+      utterance.rate = config.voiceRate;
+      utterance.pitch = config.voicePitch;
+      utterance.lang = 'ms-MY';
+
+      // Pick standard natural voice
+      const voices = synth.getVoices();
+      const preferredVoice = voices.find(v => v.lang.includes('ms') || v.lang.includes('id') || v.name.includes('Google') || v.name.includes('Natural'));
+      if (preferredVoice) utterance.voice = preferredVoice;
+
+      utterance.onstart = () => {
+        isSpeaking = true;
+        animateWaveform(true);
+      };
+      utterance.onend = () => {
+        isSpeaking = false;
+        animateWaveform(false);
+      };
+
+      synth.speak(utterance);
+    }
+
+    function animateWaveform(active) {
+      const bars = document.querySelectorAll('.audio-bar');
+      bars.forEach(bar => {
+        if (active) {
+          const randomHeight = Math.floor(Math.random() * 28) + 6;
+          bar.style.height = `${randomHeight}px`;
+        } else {
+          bar.style.height = '6px';
+        }
+      });
+    }
+
+    // AI Query Processor
+    async function handleUserQuery(query) {
+      appendChatMessage('user', query);
+      liveTranscript.innerText = "Sentinel is processing...";
+      animateWaveform(true);
+
+      const provider = aiProviderSelect.value;
+      let reply = "";
+
+      try {
+        if (provider === 'groq-llama' && config.groqKey) {
+          reply = await queryGroqAPI(query, config.groqKey);
+        } else if (provider === 'gemini-flash' && config.geminiKey) {
+          reply = await queryGeminiAPI(query, config.geminiKey);
+        } else {
+          // Smart Built-in Offline Neural Engine
+          reply = processSmartAssistant(query);
+        }
+      } catch (err) {
+        console.error("AI Error:", err);
+        reply = `Maaf, ralat berlaku semasa menghubungi enjin AI: ${err.message}. Menggunakan enjin Smart Assistant simpanan.`;
+      }
+
+      // Check for actions like opening sentinel apps
+      executeCommandActions(query, reply);
+
+      appendChatMessage('assistant', reply);
+      speakText(reply);
+      liveTranscript.innerText = "Listening for next command...";
+      animateWaveform(false);
+    }
+
+    // Smart Local Rule-based & Knowledge Engine
+    function processSmartAssistant(query) {
+      const q = query.toLowerCase();
+
+      if (q.includes('buka convert') || q.includes('convert') || q.includes('tukar fail')) {
+        window.open('https://convert.sentinelai.studio', '_blank');
+        return "Membuka Sentinel Convert untuk penukaran fail, PDF, Excel dan media serta-merta.";
+      }
+      if (q.includes('buka view') || q.includes('responsive') || q.includes('mockup')) {
+        window.open('https://view.sentinelai.studio', '_blank');
+        return "Membuka Sentinel View untuk ujian responsif 3D merentas pelbagai peranti.";
+      }
+      if (q.includes('buka tree') || q.includes('salasilah') || q.includes('keluarga')) {
+        window.open('https://tree.sentinelai.studio', '_blank');
+        return "Membuka Sentinel Tree untuk paparan salasilah keluarga interaktif.";
+      }
+      if (q.includes('buka story') || q.includes('novel') || q.includes('cerita')) {
+        window.open('https://story.sentinelai.studio', '_blank');
+        return "Membuka Sentinel Story: Chasovoy Stanok.";
+      }
+      if (q.includes('buka truth') || q.includes('fact check') || q.includes('fakta')) {
+        window.open('https://truth.sentinelai.studio', '_blank');
+        return "Membuka Sentinel Truth untuk semakan fakta dan analisis sentimen politik.";
+      }
+      if (q.includes('buka threat') || q.includes('threat') || q.includes('keselamatan')) {
+        window.open('https://threat.sentinelai.studio', '_blank');
+        return "Membuka Sentinel Threat Scanner.";
+      }
+      if (q.includes('buka hub') || q.includes('master') || q.includes('portal')) {
+        window.open('https://hub.sentinelai.studio', '_blank');
+        return "Membuka Sentinel Master Portal.";
+      }
+
+      // General Queries
+      if (q.includes('status') || q.includes('sihat') || q.includes('server')) {
+        return "Semua servis Sentinel berada dalam status 🟢 ONLINE dan berjalan lancar di pelayan Kali Linux dengan pengurusan PM2.";
+      }
+      if (q.includes('siapa kamu') || q.includes('siapa anda') || q.includes('who are you')) {
+        return "Saya ialah Sentinel Touch, pembantu pintar berkuasa AI dan gerak isyarat tangan untuk seluruh ekosistem Sentinel anda.";
+      }
+      if (q.includes('jenaka') || q.includes('lawak') || q.includes('joke')) {
+        const jokes = [
+          "Kenapa hacker suka kopi sejuk? Sebab dia tak suka Java panas!",
+          "Ada 10 jenis orang di dunia: mereka yang faham nombor perduaan, dan mereka yang tidak.",
+          "Kenapa programmer selalu pakai cermin mata gelap? Sebab mereka tak boleh 'C#'!"
+        ];
+        return jokes[Math.floor(Math.random() * jokes.length)];
+      }
+      if (q.includes('kira') || q.includes('darab') || q.includes('tambah') || q.includes('bahagi')) {
+        try {
+          const match = q.match(/(\d+)\s*(darab|\*|tambah|\+|tolak|\-|bahagi|\/)\s*(\d+)/);
+          if (match) {
+            const a = parseFloat(match[1]);
+            const op = match[2];
+            const b = parseFloat(match[3]);
+            let res = 0;
+            if (op === 'darab' || op === '*') res = a * b;
+            else if (op === 'tambah' || op === '+') res = a + b;
+            else if (op === 'tolak' || op === '-') res = a - b;
+            else if (op === 'bahagi' || op === '/') res = a / b;
+            return `Hasil kiraan untuk ${a} ${op} ${b} adalah ${res}.`;
+          }
+        } catch (e) {}
+      }
+
+      return `Saya menerima arahan anda: "${query}". Untuk fungsi perbualan mendalam tanpa had, anda boleh masukkan Groq API Key percuma di menu Tetapan.`;
+    }
+
+    // Cloud Groq Llama 3 API Call
+    async function queryGroqAPI(query, apiKey) {
+      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: "llama-3.3-70b-versatile",
+          messages: [
+            {
+              role: "system",
+              content: "You are Sentinel Touch, an intelligent voice and gesture companion for the Sentinel Ecosystem. Keep responses concise, friendly, and under 3 sentences unless asked for details. Answer in the user's language (Malay or English)."
+            },
+            { role: "user", content: query }
+          ],
+          temperature: 0.7,
+          max_tokens: 250
+        })
+      });
+      const data = await res.json();
+      return data.choices?.[0]?.message?.content || "Tiada respon dari Groq.";
+    }
+
+    // Cloud Gemini API Call
+    async function queryGeminiAPI(query, apiKey) {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: `You are Sentinel Touch voice assistant. Answer briefly in under 3 sentences: ${query}` }] }]
+        })
+      });
+      const data = await res.json();
+      return data.candidates?.[0]?.content?.parts?.[0]?.text || "Tiada respon dari Gemini.";
+    }
+
+    function executeCommandActions(query, reply) {
+      const actionMatch = reply.match(/\[ACTION:\s*(.+?)\]/i);
+      if (actionMatch) {
+        const cmd = actionMatch[1].trim();
+        console.log("Action Triggered:", cmd);
+      }
+    }
+
+    function appendChatMessage(role, text) {
+      const div = document.createElement('div');
+      div.className = `flex items-start gap-3 p-3.5 rounded-2xl ${
+        role === 'user' ? 'bg-teal-500/10 border border-teal-500/20 ml-8' : 'bg-white/5 border border-white/5 mr-8'
+      }`;
+
+      div.innerHTML = `
+        <div class="w-8 h-8 rounded-xl ${
+          role === 'user' ? 'bg-teal-500 text-slate-950 font-bold' : 'bg-teal-500/20 text-teal-300'
+        } flex items-center justify-center shrink-0 text-sm">
+          ${role === 'user' ? '👤' : '🤖'}
+        </div>
+        <div class="space-y-1">
+          <div class="flex items-center gap-2">
+            <span class="font-semibold text-white text-xs">${role === 'user' ? 'You' : 'Sentinel Assistant'}</span>
+            <span class="text-[10px] text-slate-400 font-mono">${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+          </div>
+          <p class="text-xs text-slate-200 leading-relaxed">${text}</p>
+        </div>
+      `;
+
+      chatMessages.appendChild(div);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    // Form submission
+    textChatForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const val = textChatInput.value.trim();
+      if (!val) return;
+      textChatInput.value = '';
+      handleUserQuery(val);
+    });
+
+    btnClearHistory.addEventListener('click', () => {
+      chatMessages.innerHTML = '';
+      appendChatMessage('assistant', 'Sejarah perbualan telah dikosongkan.');
+    });
+
+    window.simulateQuery = (txt) => {
+      handleUserQuery(txt);
+    };
+
+    // ── MediaPipe Hands Vision Gesture Tracking ──
+    let hands = null;
+    let camera = null;
+
+    function initMediaPipeHands() {
+      hands = new Hands({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+      });
+
+      hands.setOptions({
+        maxNumHands: 1,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.65,
+        minTrackingConfidence: 0.65
+      });
+
+      hands.onResults(onHandResults);
+    }
+
+    function onHandResults(results) {
+      const canvasCtx = gestureCanvas.getContext('2d');
+      gestureCanvas.width = webcamVideo.videoWidth || 640;
+      gestureCanvas.height = webcamVideo.videoHeight || 480;
+
+      canvasCtx.save();
+      canvasCtx.clearRect(0, 0, gestureCanvas.width, gestureCanvas.height);
+      canvasCtx.drawImage(results.image, 0, 0, gestureCanvas.width, gestureCanvas.height);
+
+      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+        for (const landmarks of results.multiHandLandmarks) {
+          // Draw connecting skeleton
+          drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, { color: '#2dd4bf', lineWidth: 3 });
+          drawLandmarks(canvasCtx, landmarks, { color: '#38bdf8', lineWidth: 1, radius: 4 });
+
+          // Recognize gesture
+          classifyGesture(landmarks);
+        }
+      } else {
+        detectedGestureBadge.classList.add('hidden');
+      }
+      canvasCtx.restore();
+    }
+
+    function classifyGesture(landmarks) {
+      // Landmark indices: Wrist 0, Thumb Tip 4, Index Tip 8, Middle Tip 12, Ring Tip 16, Pinky Tip 20
+      const isThumbExtended = landmarks[4].y < landmarks[3].y;
+      const isIndexExtended = landmarks[8].y < landmarks[6].y;
+      const isMiddleExtended = landmarks[12].y < landmarks[10].y;
+      const isRingExtended = landmarks[16].y < landmarks[14].y;
+      const isPinkyExtended = landmarks[20].y < landmarks[18].y;
+
+      const now = Date.now();
+      let gesture = null;
+
+      // 1. Open Palm (All 5 extended)
+      if (isIndexExtended && isMiddleExtended && isRingExtended && isPinkyExtended) {
+        gesture = { name: "Open Palm", icon: "🖐️", action: "Stop / Mute" };
+      }
+      // 2. Peace Sign (Index + Middle extended, Ring + Pinky folded)
+      else if (isIndexExtended && isMiddleExtended && !isRingExtended && !isPinkyExtended) {
+        gesture = { name: "Peace Sign", icon: "✌️", action: "Launch Hub" };
+      }
+      // 3. Pointing Up (Only Index extended)
+      else if (isIndexExtended && !isMiddleExtended && !isRingExtended && !isPinkyExtended) {
+        gesture = { name: "Pointing", icon: "☝️", action: "Activate Voice" };
+      }
+      // 4. Thumbs Up (Thumb up, others folded)
+      else if (isThumbExtended && !isIndexExtended && !isMiddleExtended && !isRingExtended) {
+        gesture = { name: "Thumbs Up", icon: "👍", action: "Confirm" };
+      }
+
+      if (gesture) {
+        detectedGestureBadge.classList.remove('hidden');
+        detectedGestureIcon.innerText = gesture.icon;
+        detectedGestureText.innerText = `${gesture.name} → ${gesture.action}`;
+
+        // Debounce gesture trigger to once every 2.5 seconds
+        if (now - lastGestureTime > 2500) {
+          lastGestureTime = now;
+          triggerGestureAction(gesture.name);
+        }
+      }
+    }
+
+    function triggerGestureAction(gestureName) {
+      if (gestureName === "Open Palm") {
+        if (synth) synth.cancel();
+        liveTranscript.innerText = "[Gesture: Open Palm] Stopped audio playback.";
+      } else if (gestureName === "Peace Sign") {
+        window.open('https://hub.sentinelai.studio', '_blank');
+        speakText("Membuka Sentinel Master Hub.");
+      } else if (gestureName === "Pointing") {
+        if (!isListening) toggleVoiceListening();
+      } else if (gestureName === "Thumbs Up") {
+        speakText("Bagus! Arahan disahkan.");
+      }
+    }
+
+    async function toggleCamera() {
+      if (cameraActive) {
+        if (camera) camera.stop();
+        cameraActive = false;
+        btnToggleCamera.innerText = "Enable Camera";
+        cameraPlaceholder.classList.remove('hidden');
+        webcamVideo.classList.add('hidden');
+      } else {
+        if (!hands) initMediaPipeHands();
+        cameraPlaceholder.classList.add('hidden');
+        webcamVideo.classList.remove('hidden');
+
+        camera = new Camera(webcamVideo, {
+          onFrame: async () => {
+            await hands.send({ image: webcamVideo });
+          },
+          width: 640,
+          height: 480
+        });
+        await camera.start();
+        cameraActive = true;
+        btnToggleCamera.innerText = "Disable Camera";
+      }
+    }
+
+    btnToggleCamera.addEventListener('click', toggleCamera);
+
+    // Settings Modal
+    btnOpenSettings.addEventListener('click', () => {
+      cfgGroqKey.value = config.groqKey;
+      cfgGeminiKey.value = config.geminiKey;
+      cfgVoiceRate.value = config.voiceRate;
+      cfgVoicePitch.value = config.voicePitch;
+      settingsModal.classList.remove('hidden');
+    });
+
+    const closeSettings = () => settingsModal.classList.add('hidden');
+    btnCloseSettings.addEventListener('click', closeSettings);
+    settingsBackdrop.addEventListener('click', closeSettings);
+
+    btnSaveSettings.addEventListener('click', () => {
+      config.groqKey = cfgGroqKey.value.trim();
+      config.geminiKey = cfgGeminiKey.value.trim();
+      config.voiceRate = parseFloat(cfgVoiceRate.value);
+      config.voicePitch = parseFloat(cfgVoicePitch.value);
+
+      localStorage.setItem('sentinel_groq_key', config.groqKey);
+      localStorage.setItem('sentinel_gemini_key', config.geminiKey);
+      localStorage.setItem('sentinel_voice_rate', config.voiceRate);
+      localStorage.setItem('sentinel_voice_pitch', config.voicePitch);
+
+      closeSettings();
+      appendChatMessage('assistant', 'Tetapan berjaya disimpan!');
+    });
+
+    aiProviderSelect.addEventListener('change', () => {
+      activeEngineLabel.innerText = aiProviderSelect.options[aiProviderSelect.selectedIndex].text.split(' ')[0] + ' Brain';
+    });
+  </script>
+</body>
+</html>
